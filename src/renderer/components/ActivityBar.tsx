@@ -35,10 +35,20 @@ const IconSettings = () => (
   </svg>
 )
 
+const IconAi = () => (
+  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+    <path d="M12 2a10 10 0 0 1 10 10c0 5.5-4.5 10-10 10S2 17.5 2 12 6.5 2 12 2Z" />
+    <path d="M8 14s1.5 2 4 2 4-2 4-2" />
+    <line x1="9" y1="9" x2="9.01" y2="9" />
+    <line x1="15" y1="9" x2="15.01" y2="9" />
+  </svg>
+)
+
 const ACTIVITIES: Array<{ id: ActivityView; icon: React.ReactNode; title: string }> = [
   { id: 'explorer',  icon: <IconExplorer />,  title: 'Explorer (Ctrl+Shift+E)' },
   { id: 'search',    icon: <IconSearch />,    title: 'Search (Ctrl+Shift+F)' },
   { id: 'minecraft', icon: <IconMinecraft />, title: 'Minecraft' },
+  { id: 'ai',        icon: <IconAi />,        title: 'Antigravity AI (Ctrl+Shift+A)' },
 ]
 
 const BOTTOM_ACTIVITIES: Array<{ id: ActivityView; icon: React.ReactNode; title: string }> = [

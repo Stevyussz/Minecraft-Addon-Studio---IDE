@@ -8,7 +8,7 @@ import { useProjectStore } from './store/projectStore'
 import { useEditorStore } from './store/editorStore'
 import { useIndexStore } from './store/indexStore'
 
-export type ActivityView = 'explorer' | 'search' | 'minecraft' | 'settings'
+export type ActivityView = 'explorer' | 'search' | 'minecraft' | 'ai' | 'settings'
 export type PanelTab = 'terminal' | 'problems' | 'output'
 
 export default function App() {

@@ -118,6 +118,33 @@ const masAPI = {
   /** Full-text search across project files */
   search: (query: string, projectPath: string): Promise<IPCResponse<SearchResult[]>> =>
     ipcRenderer.invoke(IPC.SEARCH_QUERY, query, projectPath),
+  // ─────────────────────────────────────────────────────────────
+  // Phase 3 — AI Chat
+  // ─────────────────────────────────────────────────────────────
+
+  aiChatRequest: (history: import('../shared/types').ChatMessage[]): Promise<IPCResponse> =>
+    ipcRenderer.invoke(IPC.AI_CHAT_REQUEST, history),
+
+  aiChatCancel: (): Promise<IPCResponse> =>
+    ipcRenderer.invoke(IPC.AI_CHAT_CANCEL),
+
+  onAiStreamData: (callback: (chunk: string) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, chunk: string) => callback(chunk)
+    ipcRenderer.on(IPC.AI_CHAT_STREAM_DATA, listener)
+    return () => ipcRenderer.removeListener(IPC.AI_CHAT_STREAM_DATA, listener)
+  },
+
+  onAiStreamEnd: (callback: () => void): (() => void) => {
+    const listener = () => callback()
+    ipcRenderer.on(IPC.AI_CHAT_STREAM_END, listener)
+    return () => ipcRenderer.removeListener(IPC.AI_CHAT_STREAM_END, listener)
+  },
+
+  onAiStreamError: (callback: (error: string) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, error: string) => callback(error)
+    ipcRenderer.on(IPC.AI_CHAT_STREAM_ERROR, listener)
+    return () => ipcRenderer.removeListener(IPC.AI_CHAT_STREAM_ERROR, listener)
+  },
 }
 
 contextBridge.exposeInMainWorld('mas', masAPI)

@@ -1,10 +1,13 @@
 import { app, BrowserWindow, ipcMain, dialog, nativeTheme } from 'electron'
 import * as path from 'path'
 import * as fs from 'fs'
-import { IPC, type AppSettings, type IPCResponse } from '../shared/types'
+import { IPC, type IPCResponse, type AppSettings } from '../shared/types'
 import { detectMinecraftProject, getProjectTree, listDirectory, detectLanguage } from '../core/minecraft/detector'
 import { ProjectIndexer } from '../core/indexer/ProjectIndexer'
 import { ProjectSearch } from '../core/search/ProjectSearch'
+import { OpenAIClient } from '../core/ai/OpenAIClient'
+import { ContextManager } from '../core/ai/ContextManager'
+import type { ChatMessage, AppSettings as AppSettingsType } from '../shared/types'
 
 // node-pty is a native module - lazy-require to avoid issues
 let pty: typeof import('node-pty') | null = null
@@ -260,6 +263,59 @@ function registerIPCHandlers(win: BrowserWindow) {
     } catch (err) {
       return { success: false, error: String(err) }
     }
+  })
+
+  // ─────────────────────────────────────────────────────────────
+  // Phase 3 — AI Chat
+  // ─────────────────────────────────────────────────────────────
+
+  let activeChatController: AbortController | null = null
+
+  ipcMain.handle(IPC.AI_CHAT_REQUEST, async (_, history: ChatMessage[]): Promise<IPCResponse> => {
+    try {
+      if (activeChatController) {
+        activeChatController.abort()
+      }
+      activeChatController = new AbortController()
+
+      const store = await getStore()
+      const aiSettings = (store.store as AppSettingsType).ai
+
+      const client = new OpenAIClient(aiSettings)
+      const messages = ContextManager.buildPrompt(history, currentIndex, { maxTokens: 8000 })
+
+      // Start streaming (non-blocking)
+      client.streamChat({ messages }, {
+        signal: activeChatController.signal,
+        onData: (chunk) => {
+          win.webContents.send(IPC.AI_CHAT_STREAM_DATA, chunk)
+        },
+        onComplete: () => {
+          win.webContents.send(IPC.AI_CHAT_STREAM_END)
+          activeChatController = null
+        },
+        onError: (err) => {
+          win.webContents.send(IPC.AI_CHAT_STREAM_ERROR, err.message)
+          activeChatController = null
+        }
+      }).catch(err => {
+        if (err.name !== 'AbortError') {
+          win.webContents.send(IPC.AI_CHAT_STREAM_ERROR, String(err))
+        }
+      })
+
+      return { success: true }
+    } catch (err: any) {
+      return { success: false, error: err.message || String(err) }
+    }
+  })
+
+  ipcMain.handle(IPC.AI_CHAT_CANCEL, async (): Promise<IPCResponse> => {
+    if (activeChatController) {
+      activeChatController.abort()
+      activeChatController = null
+    }
+    return { success: true }
   })
 }
 

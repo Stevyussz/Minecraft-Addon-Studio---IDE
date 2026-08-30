@@ -31,6 +31,12 @@ interface MasAPILocal {
   onIndexProgress: (callback: (progress: IndexProgress) => void) => (() => void)
   onIndexComplete: (callback: (index: ProjectIndex | null) => void) => (() => void)
   search: (query: string, projectPath: string) => Promise<IPCResponse<SearchResult[]>>
+  // Phase 3
+  aiChatRequest: (history: import('../../shared/types').ChatMessage[]) => Promise<IPCResponse>
+  aiChatCancel: () => Promise<IPCResponse>
+  onAiStreamData: (callback: (chunk: string) => void) => (() => void)
+  onAiStreamEnd: (callback: () => void) => (() => void)
+  onAiStreamError: (callback: (error: string) => void) => (() => void)
 }
 
 const mockTree: FileEntry = {
@@ -114,6 +120,11 @@ const fileContents: Record<string, string> = {
 const ptyListeners = new Map<string, Array<(id: string, data: string) => void>>()
 const indexProgressListeners: Array<(p: IndexProgress) => void> = []
 const indexCompleteListeners: Array<(i: ProjectIndex | null) => void> = []
+const aiStreamDataListeners: Array<(chunk: string) => void> = []
+const aiStreamEndListeners: Array<() => void> = []
+const aiStreamErrorListeners: Array<(err: string) => void> = []
+
+let mockChatCancel = false
 
 /** Mock project index */
 const mockIndex: ProjectIndex = {
@@ -280,6 +291,63 @@ export const masMock: MasAPILocal = {
     }
 
     return { success: true, data: results }
+  },
+
+  // ── Phase 3: AI Mock ──────────────────────────────────────
+
+  aiChatRequest: async (history) => {
+    mockChatCancel = false
+    const lastMsg = history[history.length - 1]
+    const reply = `Mock AI response to: "${lastMsg?.content}".\n\nHere is some simulated code:\n\`\`\`javascript\nconsole.log("Hello from Mock AI!");\n\`\`\`\n`
+    
+    // Simulate streaming
+    setTimeout(() => {
+      let i = 0
+      const words = reply.split(' ')
+      
+      const sendNext = () => {
+        if (mockChatCancel) return
+        if (i >= words.length) {
+          for (const cb of aiStreamEndListeners) cb()
+          return
+        }
+        for (const cb of aiStreamDataListeners) cb(words[i] + ' ')
+        i++
+        setTimeout(sendNext, 50)
+      }
+      sendNext()
+    }, 500)
+
+    return { success: true }
+  },
+
+  aiChatCancel: async () => {
+    mockChatCancel = true
+    return { success: true }
+  },
+
+  onAiStreamData: (callback) => {
+    aiStreamDataListeners.push(callback)
+    return () => {
+      const idx = aiStreamDataListeners.indexOf(callback)
+      if (idx !== -1) aiStreamDataListeners.splice(idx, 1)
+    }
+  },
+
+  onAiStreamEnd: (callback) => {
+    aiStreamEndListeners.push(callback)
+    return () => {
+      const idx = aiStreamEndListeners.indexOf(callback)
+      if (idx !== -1) aiStreamEndListeners.splice(idx, 1)
+    }
+  },
+
+  onAiStreamError: (callback) => {
+    aiStreamErrorListeners.push(callback)
+    return () => {
+      const idx = aiStreamErrorListeners.indexOf(callback)
+      if (idx !== -1) aiStreamErrorListeners.splice(idx, 1)
+    }
   },
 }
 

@@ -192,6 +192,31 @@ export interface SearchResult {
   matchLength: number
 }
 
+// ============================================================
+// Phase 3 — AI Foundation types
+// ============================================================
+
+export type ChatRole = 'system' | 'user' | 'assistant'
+
+export interface ChatMessage {
+  id: string
+  role: ChatRole
+  content: string
+  timestamp: number
+  /** Associated file references or tokens used could go here */
+  context?: {
+    files?: string[]
+    tokens?: number
+  }
+}
+
+export interface ChatCompletionRequest {
+  messages: ChatMessage[]
+  model?: string
+  temperature?: number
+  maxTokens?: number
+}
+
 /** IPC channels — request/response pairs */
 export const IPC = {
   // File system
@@ -231,6 +256,13 @@ export const IPC = {
 
   // Phase 2 — Search
   SEARCH_QUERY: 'search:query',
+
+  // Phase 3 — AI Chat
+  AI_CHAT_REQUEST: 'ai:chatRequest',
+  AI_CHAT_CANCEL: 'ai:chatCancel',
+  AI_CHAT_STREAM_DATA: 'ai:chatStreamData', // main → renderer
+  AI_CHAT_STREAM_END: 'ai:chatStreamEnd',   // main → renderer
+  AI_CHAT_STREAM_ERROR: 'ai:chatStreamError', // main → renderer
 } as const
 
 export type IPCChannel = (typeof IPC)[keyof typeof IPC]
@@ -241,3 +273,4 @@ export interface IPCResponse<T = unknown> {
   data?: T
   error?: string
 }
+

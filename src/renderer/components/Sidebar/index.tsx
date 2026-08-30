@@ -3,6 +3,7 @@ import FileExplorer from './FileExplorer'
 import SettingsPanel from './SettingsPanel'
 import MinecraftInfo from './MinecraftInfo'
 import SearchPanel from './SearchPanel'
+import AiChat from './AiChat'
 import { useProjectStore } from '../../store/projectStore'
 import { useCallback } from 'react'
 
@@ -14,6 +15,7 @@ const TITLES: Record<ActivityView, string> = {
   explorer: 'Explorer',
   search: 'Search',
   minecraft: 'Minecraft',
+  ai: 'Antigravity AI',
   settings: 'Settings',
 }
 
@@ -81,6 +83,7 @@ export default function Sidebar({ activeView }: Props) {
         {activeView === 'explorer' && <FileExplorer />}
         {activeView === 'search' && <SearchPanel />}
         {activeView === 'minecraft' && <MinecraftInfo />}
+        {activeView === 'ai' && <AiChat />}
         {activeView === 'settings' && <SettingsPanel />}
       </div>
     </div>
