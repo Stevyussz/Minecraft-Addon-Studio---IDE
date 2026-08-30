@@ -1,0 +1,72 @@
+{
+  "name": "minecraft-ai-studio",
+  "version": "0.1.0",
+  "description": "Minecraft Bedrock Add-on IDE powered by AI",
+  "main": "dist-electron/main/index.js",
+  "scripts": {
+    "dev": "vite",
+    "build": "tsc -p tsconfig.node.json --noEmit && tsc -p tsconfig.json --noEmit && vite build",
+    "typecheck": "tsc -p tsconfig.json --noEmit && tsc -p tsconfig.node.json --noEmit",
+    "preview": "vite preview",
+    "electron:dev": "concurrently -k \"vite\" \"wait-on tcp:5173 && electron .\"",
+    "electron:build": "vite build && electron-builder",
+    "lint": "eslint src --ext ts,tsx"
+  },
+  "keywords": [
+    "minecraft",
+    "bedrock",
+    "addon",
+    "ide",
+    "ai"
+  ],
+  "author": "Minecraft AI Studio",
+  "license": "MIT",
+  "devDependencies": {
+    "@types/node": "^20.17.0",
+    "@types/react": "^18.3.0",
+    "@types/react-dom": "^18.3.0",
+    "@vitejs/plugin-react": "^4.3.0",
+    "concurrently": "^9.0.0",
+    "electron": "^36.0.0",
+    "electron-builder": "^25.0.0",
+    "typescript": "^5.5.0",
+    "vite": "^5.4.0",
+    "vite-plugin-electron": "^0.28.0",
+    "vite-plugin-electron-renderer": "^0.14.0",
+    "wait-on": "^8.0.0"
+  },
+  "dependencies": {
+    "@monaco-editor/react": "^4.6.0",
+    "@xterm/addon-fit": "^0.11.0",
+    "@xterm/addon-web-links": "^0.12.0",
+    "@xterm/xterm": "^6.0.0",
+    "electron-store": "^10.0.0",
+    "monaco-editor": "^0.52.0",
+    "node-pty": "^1.0.0",
+    "react": "^18.3.0",
+    "react-dom": "^18.3.0",
+    "xterm": "^5.3.0",
+    "xterm-addon-fit": "^0.8.0",
+    "xterm-addon-web-links": "^0.9.0",
+    "zustand": "^5.0.0"
+  },
+  "build": {
+    "appId": "com.mas.minecraft-ai-studio",
+    "productName": "Minecraft AI Studio",
+    "linux": {
+      "target": [
+        "AppImage",
+        "deb"
+      ],
+      "category": "Development"
+    },
+    "files": [
+      "dist/**/*",
+      "dist-electron/**/*"
+    ],
+    "directories": {
+      "buildResources": "resources",
+      "output": "release"
+    }
+  }
+}
