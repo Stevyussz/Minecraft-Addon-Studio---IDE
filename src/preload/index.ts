@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer } from 'electron'
-import type { AppSettings, FileEntry, IPCResponse, MinecraftProjectInfo } from '../shared/types'
+import type { AppSettings, FileEntry, IPCResponse, MinecraftProjectInfo, ProjectIndex, IndexProgress, SearchResult } from '../shared/types'
 import { IPC } from '../shared/types'
 
 /**
@@ -76,6 +76,48 @@ const masAPI = {
     ipcRenderer.on(IPC.FS_FILE_CHANGED, listener)
     return () => ipcRenderer.removeListener(IPC.FS_FILE_CHANGED, listener)
   },
+
+  // ─────────────────────────────────────────────────────────────
+  // Phase 2 — Indexer
+  // ─────────────────────────────────────────────────────────────
+
+  /** Start indexing a project (fires progress + complete events) */
+  indexerStart: (projectPath: string): Promise<IPCResponse> =>
+    ipcRenderer.invoke(IPC.INDEXER_START, projectPath),
+
+  /** Get current index state */
+  indexerGet: (): Promise<IPCResponse<ProjectIndex>> =>
+    ipcRenderer.invoke(IPC.INDEXER_GET),
+
+  /** Cancel any running index operation */
+  indexerCancel: (): Promise<IPCResponse> =>
+    ipcRenderer.invoke(IPC.INDEXER_CANCEL),
+
+  /** Notify indexer that a file changed (triggers incremental re-index) */
+  indexerFileChanged: (filePath: string): Promise<IPCResponse> =>
+    ipcRenderer.invoke(IPC.INDEXER_FILE_CHANGED, filePath),
+
+  /** Subscribe to indexer progress events */
+  onIndexProgress: (callback: (progress: IndexProgress) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, progress: IndexProgress) => callback(progress)
+    ipcRenderer.on(IPC.INDEXER_PROGRESS, listener)
+    return () => ipcRenderer.removeListener(IPC.INDEXER_PROGRESS, listener)
+  },
+
+  /** Subscribe to indexer completion events */
+  onIndexComplete: (callback: (index: ProjectIndex | null) => void): (() => void) => {
+    const listener = (_e: Electron.IpcRendererEvent, index: ProjectIndex | null) => callback(index)
+    ipcRenderer.on(IPC.INDEXER_COMPLETE, listener)
+    return () => ipcRenderer.removeListener(IPC.INDEXER_COMPLETE, listener)
+  },
+
+  // ─────────────────────────────────────────────────────────────
+  // Phase 2 — Search
+  // ─────────────────────────────────────────────────────────────
+
+  /** Full-text search across project files */
+  search: (query: string, projectPath: string): Promise<IPCResponse<SearchResult[]>> =>
+    ipcRenderer.invoke(IPC.SEARCH_QUERY, query, projectPath),
 }
 
 contextBridge.exposeInMainWorld('mas', masAPI)

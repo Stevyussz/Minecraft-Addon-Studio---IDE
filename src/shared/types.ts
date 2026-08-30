@@ -108,6 +108,90 @@ export interface AppSettings {
   }
 }
 
+// ============================================================
+// Phase 2 — Project Engine types
+// ============================================================
+
+/** Compact summary of a file's structure (stored in index cache) */
+export interface FileSummary {
+  type: 'json' | 'script' | 'manifest' | 'mcfunction' | 'other'
+  /** Minecraft identifiers declared in this file */
+  identifiers?: string[]
+  /** JS/TS exports */
+  exports?: string[]
+  /** JS/TS imports (module specifiers) */
+  imports?: string[]
+  /** Other files this file references by path or ID */
+  references?: string[]
+  /** Human-readable description (e.g. pack name from manifest) */
+  description?: string
+  /** Components used (entities) */
+  components?: string[]
+}
+
+/** Per-file index entry */
+export interface FileIndexEntry {
+  path: string
+  /** SHA-1 of file content */
+  hash: string
+  /** fs.statSync().mtimeMs */
+  mtime: number
+  language: string
+  size: number
+  summary: FileSummary
+  /** When this entry was indexed */
+  parsedAt: number
+}
+
+/** Dependency graph edge */
+export interface DependencyEdge {
+  from: string   // file path
+  to: string     // file path or identifier
+  type: 'import' | 'reference' | 'entity_use' | 'animation_ref'
+}
+
+/** Identifier registry — all known IDs in the project */
+export interface IdentifierRegistry {
+  entities: string[]
+  items: string[]
+  blocks: string[]
+  animations: string[]
+  animationControllers: string[]
+  renderControllers: string[]
+  particles: string[]
+  sounds: string[]
+  functions: string[]
+}
+
+/** Full project index (serializable to disk) */
+export interface ProjectIndex {
+  projectPath: string
+  indexedAt: number
+  fileCount: number
+  files: Record<string, FileIndexEntry>
+  identifiers: IdentifierRegistry
+  dependencies: DependencyEdge[]
+  diagnostics: Diagnostic[]
+}
+
+/** Indexer progress update sent from main → renderer */
+export interface IndexProgress {
+  done: number
+  total: number
+  currentFile: string
+  phase: 'scanning' | 'indexing' | 'graphing' | 'validating' | 'complete'
+}
+
+/** Search result */
+export interface SearchResult {
+  file: string
+  line: number
+  column: number
+  preview: string
+  matchStart: number
+  matchLength: number
+}
+
 /** IPC channels — request/response pairs */
 export const IPC = {
   // File system
@@ -136,6 +220,17 @@ export const IPC = {
 
   // Window
   WIN_SHOW_OPEN_DIALOG: 'win:showOpenDialog',
+
+  // Phase 2 — Indexer
+  INDEXER_START: 'indexer:start',
+  INDEXER_PROGRESS: 'indexer:progress',   // main → renderer
+  INDEXER_COMPLETE: 'indexer:complete',   // main → renderer
+  INDEXER_GET: 'indexer:get',             // get current index
+  INDEXER_FILE_CHANGED: 'indexer:fileChanged', // trigger re-index single file
+  INDEXER_CANCEL: 'indexer:cancel',
+
+  // Phase 2 — Search
+  SEARCH_QUERY: 'search:query',
 } as const
 
 export type IPCChannel = (typeof IPC)[keyof typeof IPC]

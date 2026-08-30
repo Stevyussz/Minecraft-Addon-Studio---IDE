@@ -3,6 +3,8 @@ import * as path from 'path'
 import * as fs from 'fs'
 import { IPC, type AppSettings, type IPCResponse } from '../shared/types'
 import { detectMinecraftProject, getProjectTree, listDirectory, detectLanguage } from '../core/minecraft/detector'
+import { ProjectIndexer } from '../core/indexer/ProjectIndexer'
+import { ProjectSearch } from '../core/search/ProjectSearch'
 
 // node-pty is a native module - lazy-require to avoid issues
 let pty: typeof import('node-pty') | null = null
@@ -19,6 +21,11 @@ let electronStore: any = null
 /** Track active PTY processes: id -> IPty */
 const ptyProcesses = new Map<string, ReturnType<NonNullable<typeof pty>['spawn']>>()
 let ptyIdCounter = 0
+
+/** Phase 2: Project indexer (one per project session) */
+let activeIndexer: ProjectIndexer | null = null
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+let currentIndex: any = null
 
 // ─────────────────────────────────────────────────────────────
 // Settings helpers
@@ -181,6 +188,78 @@ function registerIPCHandlers(win: BrowserWindow) {
       ptyProcesses.delete(id)
     }
     return { success: true }
+  })
+
+  // ─────────────────────────────────────────────────────────────
+  // Phase 2 — Indexer
+  // ─────────────────────────────────────────────────────────────
+
+  /** Start full project index (non-blocking) */
+  ipcMain.handle(IPC.INDEXER_START, async (_, projectPath: string): Promise<IPCResponse> => {
+    try {
+      // Cancel any running indexer
+      if (activeIndexer) activeIndexer.cancel()
+
+      const cacheDir = path.join(app.getPath('userData'), 'index')
+      activeIndexer = new ProjectIndexer(cacheDir, projectPath)
+
+      // Run indexer asynchronously — progress/complete sent via IPC events
+      activeIndexer.indexProject(projectPath, (progress) => {
+        win.webContents.send(IPC.INDEXER_PROGRESS, progress)
+      }).then(index => {
+        currentIndex = index
+        win.webContents.send(IPC.INDEXER_COMPLETE, index)
+      }).catch(err => {
+        console.error('[Indexer] Error:', err)
+        win.webContents.send(IPC.INDEXER_COMPLETE, null)
+      })
+
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  /** Get the current cached index */
+  ipcMain.handle(IPC.INDEXER_GET, async (): Promise<IPCResponse> => {
+    return { success: true, data: currentIndex }
+  })
+
+  /** Cancel indexing */
+  ipcMain.handle(IPC.INDEXER_CANCEL, async (): Promise<IPCResponse> => {
+    activeIndexer?.cancel()
+    return { success: true }
+  })
+
+  /** Re-index a single file (triggered by file-watch or manual save) */
+  ipcMain.handle(IPC.INDEXER_FILE_CHANGED, async (_, filePath: string): Promise<IPCResponse> => {
+    if (!activeIndexer) return { success: false, error: 'No active indexer' }
+    try {
+      const { entry, diagnostics } = activeIndexer.reindexFile(filePath)
+      if (currentIndex) {
+        currentIndex.files[filePath] = entry
+        currentIndex.diagnostics = currentIndex.diagnostics
+          .filter((d: { file: string }) => d.file !== filePath)
+          .concat(diagnostics)
+      }
+      win.webContents.send(IPC.INDEXER_COMPLETE, currentIndex)
+      return { success: true }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
+  })
+
+  // ─────────────────────────────────────────────────────────────
+  // Phase 2 — Search
+  // ─────────────────────────────────────────────────────────────
+
+  ipcMain.handle(IPC.SEARCH_QUERY, async (_, query: string, projectPath: string): Promise<IPCResponse> => {
+    try {
+      const results = ProjectSearch.search(query, projectPath, currentIndex ?? undefined)
+      return { success: true, data: results }
+    } catch (err) {
+      return { success: false, error: String(err) }
+    }
   })
 }
 

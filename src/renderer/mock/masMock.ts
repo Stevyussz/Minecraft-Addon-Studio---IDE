@@ -3,7 +3,10 @@
  * when running outside Electron (e.g. Chromium/Firefox for UI review)
  */
 
-import type { AppSettings, FileEntry, MinecraftProjectInfo, IPCResponse } from '../../shared/types'
+import type {
+  AppSettings, FileEntry, MinecraftProjectInfo, IPCResponse,
+  ProjectIndex, IndexProgress, SearchResult, IdentifierRegistry,
+} from '../../shared/types'
 
 // Inline minimal MasAPI type to avoid circular import
 interface MasAPILocal {
@@ -20,6 +23,14 @@ interface MasAPILocal {
   ptyKill: (id: string) => Promise<IPCResponse>
   onPtyData: (callback: (id: string, data: string) => void) => (() => void)
   onFileChanged: (callback: (filePath: string) => void) => (() => void)
+  // Phase 2
+  indexerStart: (projectPath: string) => Promise<IPCResponse>
+  indexerGet: () => Promise<IPCResponse<ProjectIndex>>
+  indexerCancel: () => Promise<IPCResponse>
+  indexerFileChanged: (filePath: string) => Promise<IPCResponse>
+  onIndexProgress: (callback: (progress: IndexProgress) => void) => (() => void)
+  onIndexComplete: (callback: (index: ProjectIndex | null) => void) => (() => void)
+  search: (query: string, projectPath: string) => Promise<IPCResponse<SearchResult[]>>
 }
 
 const mockTree: FileEntry = {
@@ -28,9 +39,7 @@ const mockTree: FileEntry = {
   isDirectory: true,
   children: [
     {
-      name: 'BP',
-      path: '/mock/test-mc-addon/BP',
-      isDirectory: true,
+      name: 'BP', path: '/mock/test-mc-addon/BP', isDirectory: true,
       children: [
         { name: 'manifest.json', path: '/mock/test-mc-addon/BP/manifest.json', isDirectory: false, language: 'json' },
         {
@@ -59,8 +68,7 @@ const mockTree: FileEntry = {
 }
 
 const mockMcInfo: MinecraftProjectInfo = {
-  type: 'addon',
-  hasBP: true, hasRP: true, hasScripts: true,
+  type: 'addon', hasBP: true, hasRP: true, hasScripts: true,
   bpPath: '/mock/test-mc-addon/BP', rpPath: '/mock/test-mc-addon/RP',
   bpManifest: {
     format_version: 2,
@@ -104,6 +112,33 @@ const fileContents: Record<string, string> = {
 }
 
 const ptyListeners = new Map<string, Array<(id: string, data: string) => void>>()
+const indexProgressListeners: Array<(p: IndexProgress) => void> = []
+const indexCompleteListeners: Array<(i: ProjectIndex | null) => void> = []
+
+/** Mock project index */
+const mockIndex: ProjectIndex = {
+  projectPath: '/mock/test-mc-addon',
+  indexedAt: Date.now(),
+  fileCount: 5,
+  files: {
+    '/mock/test-mc-addon/BP/manifest.json': { path: '/mock/test-mc-addon/BP/manifest.json', hash: 'abc', mtime: Date.now(), language: 'json', size: 200, summary: { type: 'manifest', description: 'Test Addon BP' }, parsedAt: Date.now() },
+    '/mock/test-mc-addon/BP/scripts/main.js': { path: '/mock/test-mc-addon/BP/scripts/main.js', hash: 'def', mtime: Date.now(), language: 'javascript', size: 300, summary: { type: 'script', imports: ['@minecraft/server'], exports: [] }, parsedAt: Date.now() },
+    '/mock/test-mc-addon/BP/entities/test_entity.json': { path: '/mock/test-mc-addon/BP/entities/test_entity.json', hash: 'ghi', mtime: Date.now(), language: 'json', size: 150, summary: { type: 'json', identifiers: ['test:test_entity'] }, parsedAt: Date.now() },
+    '/mock/test-mc-addon/RP/manifest.json': { path: '/mock/test-mc-addon/RP/manifest.json', hash: 'jkl', mtime: Date.now(), language: 'json', size: 150, summary: { type: 'manifest', description: 'Test Addon RP' }, parsedAt: Date.now() },
+    '/mock/test-mc-addon/README.md': { path: '/mock/test-mc-addon/README.md', hash: 'mno', mtime: Date.now(), language: 'markdown', size: 80, summary: { type: 'other' }, parsedAt: Date.now() },
+  },
+  identifiers: {
+    entities: ['test:test_entity'],
+    items: [], blocks: [], animations: [], animationControllers: [],
+    renderControllers: [], particles: [], sounds: [], functions: [],
+  },
+  dependencies: [
+    { from: '/mock/test-mc-addon/BP/scripts/main.js', to: '@minecraft/server', type: 'import' },
+  ],
+  diagnostics: [
+    { severity: 'warning', file: '/mock/test-mc-addon/BP/manifest.json', message: 'Mock: min_engine_version not specified', code: 'manifest/missing-optional', source: 'manifest-validator' },
+  ],
+}
 
 export const masMock: MasAPILocal = {
   openProject: async () => {
@@ -120,7 +155,6 @@ export const masMock: MasAPILocal = {
 
   writeFile: async (filePath: string, content: string) => {
     fileContents[filePath] = content
-    console.log('[Mock] writeFile:', filePath)
     return { success: true }
   },
 
@@ -131,16 +165,13 @@ export const masMock: MasAPILocal = {
   },
 
   detectProject: async () => ({ success: true, data: mockMcInfo }),
-
   getSettings: async () => ({ success: true, data: defaultSettings }),
-
   setSettings: async () => ({ success: true }),
 
   ptyCreate: async (_cwd, _shell) => {
     const id = 'mock-pty-1'
     setTimeout(() => {
-      const listeners = ptyListeners.get(id) ?? []
-      for (const l of listeners) {
+      for (const l of ptyListeners.get(id) ?? []) {
         l(id, '\x1b[32m[MAS Terminal Mock]\x1b[0m /bin/bash\r\n\r\n')
         l(id, 'user@mas:~/project$ ')
       }
@@ -150,15 +181,10 @@ export const masMock: MasAPILocal = {
 
   ptyInput: (_id, data) => {
     const id = 'mock-pty-1'
-    const listeners = ptyListeners.get(id) ?? []
-    for (const l of listeners) {
-      if (data === '\r') {
-        l(id, '\r\nuser@mas:~/project$ ')
-      } else if (data === '\x7f') {
-        l(id, '\b \b')
-      } else {
-        l(id, data)
-      }
+    for (const l of ptyListeners.get(id) ?? []) {
+      if (data === '\r') l(id, '\r\nuser@mas:~/project$ ')
+      else if (data === '\x7f') l(id, '\b \b')
+      else l(id, data)
     }
   },
 
@@ -178,6 +204,83 @@ export const masMock: MasAPILocal = {
   },
 
   onFileChanged: (_callback: (filePath: string) => void) => () => { /* no-op */ },
+
+  // ── Phase 2: Indexer mock ──────────────────────────────────
+
+  indexerStart: async (_projectPath) => {
+    // Simulate indexing with progress events
+    setTimeout(() => {
+      const steps: IndexProgress[] = [
+        { done: 0, total: 5, currentFile: 'Scanning…', phase: 'scanning' },
+        { done: 2, total: 5, currentFile: 'BP/manifest.json', phase: 'indexing' },
+        { done: 4, total: 5, currentFile: 'RP/manifest.json', phase: 'indexing' },
+        { done: 5, total: 5, currentFile: 'Building graph…', phase: 'graphing' },
+        { done: 5, total: 5, currentFile: '', phase: 'complete' },
+      ]
+
+      let i = 0
+      const send = () => {
+        if (i >= steps.length) {
+          for (const cb of indexCompleteListeners) cb(mockIndex)
+          return
+        }
+        for (const cb of indexProgressListeners) cb(steps[i])
+        i++
+        setTimeout(send, 300)
+      }
+      send()
+    }, 100)
+
+    return { success: true }
+  },
+
+  indexerGet: async () => ({ success: true, data: mockIndex }),
+  indexerCancel: async () => ({ success: true }),
+  indexerFileChanged: async () => ({ success: true }),
+
+  onIndexProgress: (callback: (p: IndexProgress) => void) => {
+    indexProgressListeners.push(callback)
+    return () => {
+      const idx = indexProgressListeners.indexOf(callback)
+      if (idx !== -1) indexProgressListeners.splice(idx, 1)
+    }
+  },
+
+  onIndexComplete: (callback: (i: ProjectIndex | null) => void) => {
+    indexCompleteListeners.push(callback)
+    return () => {
+      const idx = indexCompleteListeners.indexOf(callback)
+      if (idx !== -1) indexCompleteListeners.splice(idx, 1)
+    }
+  },
+
+  // ── Phase 2: Search mock ──────────────────────────────────
+
+  search: async (query: string) => {
+    await new Promise(r => setTimeout(r, 200))
+    const results: SearchResult[] = []
+    const q = query.toLowerCase()
+
+    for (const [filePath, content] of Object.entries(fileContents)) {
+      const lines = content.split('\n')
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i]
+        const col = line.toLowerCase().indexOf(q)
+        if (col !== -1 && results.length < 50) {
+          results.push({
+            file: filePath,
+            line: i + 1,
+            column: col + 1,
+            preview: line.trim().slice(0, 80),
+            matchStart: col,
+            matchLength: query.length,
+          })
+        }
+      }
+    }
+
+    return { success: true, data: results }
+  },
 }
 
 function findEntry(root: FileEntry, searchPath: string): FileEntry | null {

@@ -8,7 +8,7 @@ interface ProjectState {
   isLoading: boolean
   error: string | null
 
-  setProject: (projectPath: string, tree: FileEntry, mcInfo: MinecraftProjectInfo) => void
+  setProject: (projectPath: string, tree: FileEntry, mcInfo: MinecraftProjectInfo | null) => void
   setLoading: (loading: boolean) => void
   setError: (error: string | null) => void
   closeProject: () => void
@@ -24,6 +24,11 @@ export const useProjectStore = create<ProjectState>((set, get) => ({
 
   setProject: (projectPath, tree, mcInfo) => {
     set({ projectPath, projectTree: tree, mcInfo, error: null, isLoading: false })
+
+    // Auto-start indexer when project is opened (non-blocking)
+    if (window.mas?.indexerStart) {
+      window.mas.indexerStart(projectPath).catch(() => { /* silent fail */ })
+    }
   },
 
   setLoading: (isLoading) => set({ isLoading }),

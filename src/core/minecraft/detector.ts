@@ -225,3 +225,7 @@ export function listDirectory(dirPath: string): FileEntry[] {
     return []
   }
 }
+
+/** Alias for detectLanguage — used by the project indexer */
+export const getLanguage = detectLanguage
+

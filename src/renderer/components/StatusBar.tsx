@@ -1,4 +1,5 @@
 import type { EditorTab, MinecraftProjectInfo } from '../../shared/types'
+import { useIndexStore } from '../store/indexStore'
 
 interface Props {
   mcInfo: MinecraftProjectInfo | null
@@ -35,6 +36,8 @@ const GitIcon = () => (
 )
 
 export default function StatusBar({ mcInfo, activeTab }: Props) {
+  const { isIndexing, progress, index } = useIndexStore()
+
   return (
     <div className={getStatusClass(mcInfo)}>
       {/* Left side */}
@@ -46,6 +49,19 @@ export default function StatusBar({ mcInfo, activeTab }: Props) {
       {mcInfo && (
         <span className="status-item">
           <MCTypeLabel mcInfo={mcInfo} />
+        </span>
+      )}
+
+      {/* Indexing progress */}
+      {isIndexing && progress && (
+        <span className="status-item" style={{ color: '#d29922' }}>
+          <span className="spinner" style={{ width: 10, height: 10 }} />
+          <span>Indexing {progress.done}/{progress.total}</span>
+        </span>
+      )}
+      {!isIndexing && index && (
+        <span className="status-item" style={{ color: 'var(--text-success)', fontSize: 11 }}>
+          ✓ {index.fileCount} files
         </span>
       )}
 

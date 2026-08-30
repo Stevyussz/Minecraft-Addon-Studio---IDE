@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import Terminal from './Terminal'
+import Problems from './Problems'
 import type { PanelTab } from '../../App'
 
 interface Props {
@@ -41,8 +42,8 @@ export default function BottomPanel({ activeTab, onTabChange, projectPath }: Pro
         </div>
 
         {activeTab === 'problems' && (
-          <div className="panel-placeholder">
-            No problems detected. JSON validation enabled in Phase 2.
+          <div style={{ display: 'flex', height: '100%', width: '100%', overflow: 'hidden' }}>
+            <Problems />
           </div>
         )}
 

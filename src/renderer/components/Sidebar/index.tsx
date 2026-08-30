@@ -2,6 +2,7 @@ import type { ActivityView } from '../../App'
 import FileExplorer from './FileExplorer'
 import SettingsPanel from './SettingsPanel'
 import MinecraftInfo from './MinecraftInfo'
+import SearchPanel from './SearchPanel'
 import { useProjectStore } from '../../store/projectStore'
 import { useCallback } from 'react'
 
@@ -86,20 +87,3 @@ export default function Sidebar({ activeView }: Props) {
   )
 }
 
-// ──── Simple search placeholder (Phase 2 will add full-text search) ────
-function SearchPanel() {
-  return (
-    <div style={{ padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-      <input
-        type="text"
-        placeholder="Search files... (Phase 2)"
-        style={{ width: '100%' }}
-        id="search-input"
-        disabled
-      />
-      <div style={{ fontSize: 11, color: 'var(--text-muted)' }}>
-        Full-text search available in Phase 2
-      </div>
-    </div>
-  )
-}

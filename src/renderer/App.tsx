@@ -6,6 +6,7 @@ import BottomPanel from './components/Panel/index'
 import StatusBar from './components/StatusBar'
 import { useProjectStore } from './store/projectStore'
 import { useEditorStore } from './store/editorStore'
+import { useIndexStore } from './store/indexStore'
 
 export type ActivityView = 'explorer' | 'search' | 'minecraft' | 'settings'
 export type PanelTab = 'terminal' | 'problems' | 'output'
@@ -16,6 +17,21 @@ export default function App() {
 
   const { projectPath, mcInfo } = useProjectStore()
   const { tabs, activeTabId, saveFile } = useEditorStore()
+  const { setIndex, setProgress } = useIndexStore()
+
+  // Subscribe to indexer events from main process
+  useEffect(() => {
+    const unsubProgress = window.mas.onIndexProgress?.((progress) => {
+      setProgress(progress)
+    })
+    const unsubComplete = window.mas.onIndexComplete?.((index) => {
+      setIndex(index)
+    })
+    return () => {
+      unsubProgress?.()
+      unsubComplete?.()
+    }
+  }, [setIndex, setProgress])
 
   // Keyboard shortcuts
   useEffect(() => {
